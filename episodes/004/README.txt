@@ -1,0 +1,1 @@
+Episode 004 image assets prepared for publication.
