@@ -5,7 +5,6 @@ on:
     branches:
       - main
     paths:
-      - "episodes/**/*.png.b64"
       - "episodes/**/*.jpg.b64"
       - ".github/workflows/decode_episode_assets.yml"
   workflow_dispatch:
@@ -28,31 +27,30 @@ jobs:
       - name: Install Pillow
         run: python -m pip install --upgrade pillow
 
-      - name: Decode and convert image payloads
+      - name: Decode and convert JPEG payloads
         shell: bash
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
           decoded=0
 
-          for src in episodes/**/*.png.b64; do
-            dest="${src%.b64}"
-            base64 --decode "$src" > "$dest"
-            file "$dest"
-            decoded=1
-          done
-
           for src in episodes/**/*.jpg.b64; do
+            echo "변환 중: $src"
             jpg="${src%.b64}"
             png="${jpg%.jpg}.png"
-            base64 --decode "$src" > "$jpg"
+
+            if ! base64 --decode "$src" > "$jpg"; then
+              echo "::error::Base64 파일 오류: $src"
+              exit 1
+            fi
+
             python -c 'from PIL import Image; import sys; src=sys.argv[1]; dst=sys.argv[2]; im=Image.open(src).convert("RGB"); size=(1280,720) if src.endswith("cover.jpg") else (720,900); im.resize(size, Image.Resampling.LANCZOS).save(dst, format="PNG", optimize=True)' "$jpg" "$png"
             file "$png"
             decoded=1
           done
 
           if [ "$decoded" -eq 0 ]; then
-            echo "No image payloads found."
+            echo "No JPEG image payloads found."
             exit 1
           fi
 
