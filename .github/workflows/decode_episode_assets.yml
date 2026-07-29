@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - "episodes/**/*.png.b64"
-      - "episodes/**/*.png.b64.part*"
+      - "episodes/**/*.jpg.b64"
 
 permissions:
   contents: write
@@ -18,23 +18,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Rebuild and decode base64 image files
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Pillow
+        run: python -m pip install --upgrade pillow
+
+      - name: Decode and convert image payloads
         shell: bash
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
 
-          # 분할 업로드된 *.png.b64.partNN 파일을 순서대로 합칩니다.
-          for first_part in episodes/**/*.png.b64.part01; do
-            base="${first_part%.part01}"
-            cat "${base}".part* > "$base"
-          done
-
           decoded=0
+
           for src in episodes/**/*.png.b64; do
             dest="${src%.b64}"
             base64 --decode "$src" > "$dest"
             file "$dest"
+            decoded=1
+          done
+
+          for src in episodes/**/*.jpg.b64; do
+            jpg="${src%.b64}"
+            png="${jpg%.jpg}.png"
+            base64 --decode "$src" > "$jpg"
+            python - "$jpg" "$png" <<'PY'
+from pathlib import Path
+from PIL import Image
+import sys
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+with Image.open(src) as image:
+    image = image.convert("RGB")
+    target_width = 720
+    target_height = 900
+    image = image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+    image.save(dst, format="PNG", optimize=True)
+PY
+            file "$png"
             decoded=1
           done
 
