@@ -49,13 +49,17 @@ jobs:
 from pathlib import Path
 from PIL import Image
 import sys
+
 src = Path(sys.argv[1])
 dst = Path(sys.argv[2])
+
 with Image.open(src) as image:
     image = image.convert("RGB")
-    target_width = 720
-    target_height = 900
-    image = image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+    if src.name == "cover.jpg":
+        target_size = (1280, 720)
+    else:
+        target_size = (720, 900)
+    image = image.resize(target_size, Image.Resampling.LANCZOS)
     image.save(dst, format="PNG", optimize=True)
 PY
             file "$png"
