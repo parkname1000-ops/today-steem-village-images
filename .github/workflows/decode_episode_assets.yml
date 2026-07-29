@@ -39,12 +39,48 @@ jobs:
             jpg="${src%.b64}"
             png="${jpg%.jpg}.png"
 
-            if ! base64 --decode "$src" > "$jpg"; then
-              echo "::error::Base64 파일 오류: $src"
-              exit 1
-            fi
+            python - "$src" "$jpg" "$png" <<'PY'
+          import base64
+          import re
+          import sys
+          from pathlib import Path
+          from PIL import Image, ImageFile
 
-            python -c 'from PIL import Image; import sys; src=sys.argv[1]; dst=sys.argv[2]; im=Image.open(src).convert("RGB"); size=(1280,720) if src.endswith("cover.jpg") else (720,900); im.resize(size, Image.Resampling.LANCZOS).save(dst, format="PNG", optimize=True)' "$jpg" "$png"
+          src, jpg, png = map(Path, sys.argv[1:4])
+          raw = src.read_text(encoding="utf-8", errors="ignore")
+
+          # Base64 알파벳 외 문자, 공백, 잘못 들어간 따옴표 등을 제거합니다.
+          cleaned = re.sub(r"[^A-Za-z0-9+/=]", "", raw)
+          cleaned = cleaned.rstrip("=")
+          cleaned += "=" * (-len(cleaned) % 4)
+
+          if len(cleaned) < 100:
+              raise SystemExit(f"::error::Base64 데이터가 너무 짧습니다: {src}")
+
+          try:
+              data = base64.b64decode(cleaned, validate=False)
+          except Exception as exc:
+              raise SystemExit(f"::error::Base64 복원 실패: {src}: {exc}")
+
+          if not data.startswith(b"\xff\xd8\xff"):
+              raise SystemExit(f"::error::JPEG 시그니처가 없습니다: {src}")
+
+          jpg.write_bytes(data)
+          ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+          try:
+              with Image.open(jpg) as image:
+                  image.load()
+                  image = image.convert("RGB")
+                  size = (1280, 720) if jpg.name == "cover.jpg" else (720, 900)
+                  image = image.resize(size, Image.Resampling.LANCZOS)
+                  image.save(png, format="PNG", optimize=True)
+          except Exception as exc:
+              raise SystemExit(f"::error::JPEG/PIL 검증 실패: {src}: {exc}")
+
+          print(f"복원 완료: {src} -> {png} ({png.stat().st_size} bytes)")
+          PY
+
             file "$png"
             decoded=1
           done
@@ -66,5 +102,3 @@ jobs:
           fi
           git commit -m "Decode episode image assets"
           git push
-
-# Triggered by ChatGPT after episode 004 approval.
