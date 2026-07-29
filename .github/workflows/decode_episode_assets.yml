@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "episodes/**/*.png.b64"
+      - "episodes/**/*.png.b64.part*"
 
 permissions:
   contents: write
@@ -17,11 +18,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Decode base64 image files
+      - name: Rebuild and decode base64 image files
         shell: bash
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
+
+          # 분할 업로드된 *.png.b64.partNN 파일을 순서대로 합칩니다.
+          for first_part in episodes/**/*.png.b64.part01; do
+            base="${first_part%.part01}"
+            cat "${base}".part* > "$base"
+          done
+
           decoded=0
           for src in episodes/**/*.png.b64; do
             dest="${src%.b64}"
@@ -29,6 +37,7 @@ jobs:
             file "$dest"
             decoded=1
           done
+
           if [ "$decoded" -eq 0 ]; then
             echo "No image payloads found."
             exit 1
