@@ -66,3 +66,5 @@ jobs:
           fi
           git commit -m "Decode episode image assets"
           git push
+
+# Triggered by ChatGPT after episode 004 approval.
